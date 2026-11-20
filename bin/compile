@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Classic buildpack API: compile BUILD_DIR CACHE_DIR ENV_DIR
+set -euo pipefail
+fail() { echo "wkhtmltopdf: ERROR: $*" >&2; exit 1; }
+trap 'echo "wkhtmltopdf: ERROR: compile failed at line $LINENO" >&2' ERR
+[[ $# == 3 ]] || fail 'usage: compile BUILD_DIR CACHE_DIR ENV_DIR'
+build_dir=$(cd -- "$1" && pwd)
+cache_dir=$2
+buildpack=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+"$buildpack/bin/detect" "$build_dir" >/dev/null
+[[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || fail 'only Linux amd64 is supported'
+[[ ${STACK:-} == heroku-24 ]] || fail 'only STACK=heroku-24 is supported'
+# Do not select a package on the basis of STACK alone.
+# shellcheck source=/dev/null
+source /etc/os-release
+[[ $ID == ubuntu && $VERSION_ID == 24.04 ]] || fail 'Ubuntu 24.04 is required'
+for tool in curl sha256sum apt-get dpkg-deb ldd awk; do
+  command -v "$tool" >/dev/null || fail "required build tool is missing: $tool"
+done
+[[ -r /usr/share/keyrings/ubuntu-archive-keyring.gpg ]] || fail 'Ubuntu archive keyring is missing'
+# Reserve room for package indexes, downloads, extraction and the final slug.
+# Container images and language builds need a separate space budget.
+mkdir -p -- "$cache_dir"
+for directory in "$build_dir" "$cache_dir"; do
+  free_kib=$(df -Pk "$directory" | awk 'END {print $4}')
+  (( free_kib >= 524288 )) || fail "less than 512 MiB is free at $directory"
+done
+echo '-----> Installing wkhtmltopdf 0.12.6.1 (patched Qt) for Heroku-24 amd64'
+work=$(mktemp -d "$build_dir/.wkhtmltopdf-build.XXXXXX")
+trap 'rm -rf -- "$work"' EXIT
+runtime="$work/runtime"
+mkdir -p "$runtime/root" "$runtime/bin" "$runtime/etc/fonts" "$work/debs" "$work/apt/lists/partial"
+package=wkhtmltox_0.12.6.1-3.jammy_amd64.deb
+sha=4f723b2691ad8638a9df960e0421d346d7315083e3583a334f33362280ddba15
+archive="$cache_dir/$package"
+if [[ -f $archive ]] && ! printf '%s  %s\n' "$sha" "$archive" | sha256sum --check --status; then
+  fail 'cached wkhtmltox checksum is incorrect; remove that cache file and retry'
+fi
+if [[ ! -f $archive ]]; then
+  curl --fail --location --silent --show-error --retry 3 --connect-timeout 20 --max-time 180 \
+    --proto '=https' --proto-redir '=https' --tlsv1.2 \
+    "https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/$package" \
+    --output "$work/$package"
+  printf '%s  %s\n' "$sha" "$work/$package" | sha256sum --check --status || fail 'wkhtmltox checksum is incorrect'
+  mv -- "$work/$package" "$archive"
+fi
+dpkg-deb --extract "$archive" "$runtime/root"
+# Use separate APT state and a fixed list of signed Noble repositories.
+# No apt install, host source changes, maintainer scripts, or root rights.
+cat > "$work/apt/sources.list" <<'EOF'
+deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble main universe
+deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble-updates main universe
+deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://security.ubuntu.com/ubuntu noble-security main universe
+EOF
+cat > "$work/apt/apt.conf" <<EOF
+Dir::Etc::main "/dev/null";
+Dir::Etc::parts "-";
+Dir::Etc::sourcelist "$work/apt/sources.list";
+Dir::Etc::sourceparts "-";
+Dir::State::lists "$work/apt/lists";
+Dir::Cache "$work/apt/cache";
+APT::Sandbox::User "$(id -un)";
+APT::Get::AllowUnauthenticated "false";
+Acquire::AllowInsecureRepositories "false";
+Acquire::Languages "none";
+Acquire::Retries "3";
+Acquire::https::Timeout "30";
+APT::Update::Error-Mode "any";
+EOF
+export APT_CONFIG="$work/apt/apt.conf"
+apt-get update -qq
+# Explicit runtime closure, including libraries which can be in the build
+# image but absent from the run image. Use the stack's glibc and loader.
+packages=(
+  fontconfig fontconfig-config libfontconfig1 libfreetype6
+  libjpeg-turbo8 libpng16-16t64 libxrender1 libx11-6 libxau6 libxcb1
+  libxdmcp6 libbsd0 libmd0 libexpat1 libbrotli1 libbz2-1.0 zlib1g
+  libssl3t64 libstdc++6 libgcc-s1
+  fonts-dejavu-core fonts-liberation2
+  xfonts-base xfonts-75dpi xfonts-encodings
+)
+echo '-----> Downloading libraries and fonts from authenticated Ubuntu indexes'
+(cd "$work/debs" && apt-get download "${packages[@]}")
+for deb in "$work/debs/"*.deb; do
+  dpkg-deb --extract "$deb" "$runtime/root"
+  # These variables belong to dpkg-deb, not the shell.
+  # shellcheck disable=SC2016
+  dpkg-deb --show --showformat='${Package}\t${Version}\t${Architecture}\n' "$deb" >> "$runtime/packages.tsv"
+  (cd "$work/debs" && sha256sum "$(basename "$deb")") >> "$runtime/packages.sha256"
+done
+cp "$buildpack/lib/wkhtmltopdf" "$runtime/bin/wkhtmltopdf"
+cp "$buildpack/lib/fonts.conf" "$runtime/etc/fonts/fonts.conf"
+chmod 755 "$runtime/bin/wkhtmltopdf"
+mv "$runtime" "$work/verified"
+runtime="$work/verified"
+library_path="$runtime/root/usr/lib/x86_64-linux-gnu:$runtime/root/lib/x86_64-linux-gnu"
+missing=$(LD_LIBRARY_PATH="$library_path" ldd "$runtime/root/usr/local/bin/wkhtmltopdf")
+[[ $missing != *'not found'* ]] || fail 'a wkhtmltopdf runtime library is missing'
+version=$("$runtime/bin/wkhtmltopdf" --version)
+[[ $version == 'wkhtmltopdf 0.12.6.1 (with patched qt)' ]] || fail "unexpected version: $version"
+# Remove only a previous output of this buildpack, after verification.
+rm -rf -- "$build_dir/.wkhtmltopdf"
+mv -- "$runtime" "$build_dir/.wkhtmltopdf"
+mkdir -p "$build_dir/.profile.d"
+cat > "$build_dir/.profile.d/wkhtmltopdf.sh" <<'EOF'
+export WKHTMLTOPDF_PATH="$HOME/.wkhtmltopdf/bin/wkhtmltopdf"
+EOF
+echo "-----> $version"
+du -sh "$build_dir/.wkhtmltopdf"

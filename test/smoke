@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# == 2 ]] || { echo 'usage: smoke BUILD_DIR OUTPUT_DIR' >&2; exit 1; }
+if command -v wkhtmltopdf >/dev/null || [[ -x /usr/local/bin/wkhtmltopdf ]]; then
+  echo 'ERROR: use a clean environment without a system wkhtmltopdf' >&2
+  exit 1
+fi
+build_dir=$(cd -- "$1" && pwd)
+mkdir -p -- "$2"
+output_dir=$(cd -- "$2" && pwd)
+fixture=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/fixture.html
+runtime="$build_dir/.wkhtmltopdf"
+wk="$runtime/bin/wkhtmltopdf"
+[[ $("$wk" --version -) == 'wkhtmltopdf 0.12.6.1 (with patched qt)' ]]
+"$wk" --license - > "$output_dir/license.txt"
+export LD_LIBRARY_PATH="$runtime/root/usr/lib/x86_64-linux-gnu:$runtime/root/lib/x86_64-linux-gnu"
+export FONTCONFIG_FILE="$runtime/etc/fonts/fonts.conf"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/wkhtmltopdf-$UID}"
+for family in 'DejaVu Sans' 'Liberation Serif' 'DejaVu Sans Mono'; do
+  match=$("$runtime/root/usr/bin/fc-match" --format '%{family}|%{file}\n' "$family")
+  echo "$match"
+  font_file=$(readlink -f -- "${match#*|}")
+  [[ $match == "$family"* && $font_file == "$runtime/root/usr/share/fonts/"* ]]
+done
+ldd "$runtime/root/usr/local/bin/wkhtmltopdf" > "$output_dir/ldd.txt"
+if grep -q 'not found' "$output_dir/ldd.txt"; then exit 1; fi
+"$wk" --zoom 1.2 --page-size Letter "$fixture" - > "$output_dir/file.pdf"
+"$wk" --zoom 1.2 --page-size Letter - - < "$fixture" > "$output_dir/stdin.pdf"
+echo 'Version, license, bundled font paths, and PDF generation passed'

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'default_process_types: {}\n'

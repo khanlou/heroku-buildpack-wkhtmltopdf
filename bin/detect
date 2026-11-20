@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -f "${1:?BUILD_DIR is required}/.wkhtmltopdf-buildpack" ]]; then
+  echo 'wkhtmltopdf'
+else
+  echo 'wkhtmltopdf: add .wkhtmltopdf-buildpack to opt in' >&2
+  exit 1
+fi

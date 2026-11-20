@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+runtime=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+export LD_LIBRARY_PATH="$runtime/root/usr/lib/x86_64-linux-gnu:$runtime/root/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export FONTCONFIG_FILE="$runtime/etc/fonts/fonts.conf"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/wkhtmltopdf-$UID}"
+exec "$runtime/root/usr/local/bin/wkhtmltopdf" "$@"
