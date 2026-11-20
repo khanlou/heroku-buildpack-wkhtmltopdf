@@ -51,8 +51,11 @@ hashes are recorded in `.wkhtmltopdf/packages.tsv` and `packages.sha256`.
 The stack supplies glibc and the ELF loader.
 
 Fonts include DejaVu, Liberation, URW Base35, X base fonts, and X 75 dpi fonts. Generic
-font families map to DejaVu. Arial/Helvetica, Times New Roman, and Courier New
-map to Liberation. Full CJK and emoji coverage is not included.
+font families map to DejaVu. Arial and Helvetica map to Nimbus Sans.
+Times New Roman and Courier New map to Liberation. The configuration uses
+the OpenType URW faces and excludes their legacy Type 1 copies to prevent
+Qt font substitution. The DejaVu Mono package is included explicitly.
+Full CJK and emoji coverage is not included.
 
 ## Manual test
 
