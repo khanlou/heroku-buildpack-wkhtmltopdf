@@ -11,12 +11,14 @@ output_dir=$(cd -- "$2" && pwd)
 fixture=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/fixture.html
 runtime="$build_dir/.wkhtmltopdf"
 wk="$runtime/bin/wkhtmltopdf"
-[[ $("$wk" --version -) == 'wkhtmltopdf 0.12.6.1 (with patched qt)' ]]
+version=$("$wk" --version -)
+[[ $version == 'wkhtmltopdf 0.12.6.1 (with patched qt)' ]]
+echo "$version"
 "$wk" --license - > "$output_dir/license.txt"
 export LD_LIBRARY_PATH="$runtime/root/usr/lib/x86_64-linux-gnu:$runtime/root/lib/x86_64-linux-gnu"
 export FONTCONFIG_FILE="$runtime/etc/fonts/fonts.conf"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/wkhtmltopdf-$UID}"
-for family in 'DejaVu Sans' 'Liberation Serif' 'DejaVu Sans Mono'; do
+for family in 'DejaVu Sans' 'Liberation Serif' 'DejaVu Sans Mono' 'Nimbus Roman'; do
   match=$("$runtime/root/usr/bin/fc-match" --format '%{family}|%{file}\n' "$family")
   echo "$match"
   font_file=$(readlink -f -- "${match#*|}")
@@ -24,6 +26,18 @@ for family in 'DejaVu Sans' 'Liberation Serif' 'DejaVu Sans Mono'; do
 done
 ldd "$runtime/root/usr/local/bin/wkhtmltopdf" > "$output_dir/ldd.txt"
 if grep -q 'not found' "$output_dir/ldd.txt"; then exit 1; fi
+# Only glibc and its loader can come from the base image. This also permits
+# a test in an existing image after its old renderer has been hidden.
+while read -r name arrow resolved rest; do
+  [[ $arrow == '=>' ]] || continue
+  case "$name" in
+    libc.so.*|libm.so.*|libdl.so.*|librt.so.*|libpthread.so.*|libresolv.so.*|libutil.so.*|ld-linux-*.so.*) continue ;;
+  esac
+  [[ $resolved == "$runtime/root/"* ]] || {
+    echo "ERROR: $name was loaded outside the bundle: $resolved" >&2
+    exit 1
+  }
+done < "$output_dir/ldd.txt"
 "$wk" --zoom 1.2 --page-size Letter "$fixture" - > "$output_dir/file.pdf"
 "$wk" --zoom 1.2 --page-size Letter - - < "$fixture" > "$output_dir/stdin.pdf"
 echo 'Version, license, bundled font paths, and PDF generation passed'

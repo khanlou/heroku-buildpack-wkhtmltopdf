@@ -45,6 +45,9 @@ if [[ ! -f $archive ]]; then
   mv -- "$work/$package" "$archive"
 fi
 dpkg-deb --extract "$archive" "$runtime/root"
+# Keep the PDF executable and license files, without the unused image tool
+# and C API library. They are not dependencies of the PDF executable.
+rm -f -- "$runtime/root/usr/local/bin/wkhtmltoimage" "$runtime/root/usr/local/lib/"libwkhtmltox.so*
 # Use separate APT state and a fixed list of signed Noble repositories.
 # No apt install, host source changes, maintainer scripts, or root rights.
 cat > "$work/apt/sources.list" <<'EOF'
@@ -76,7 +79,7 @@ packages=(
   libjpeg-turbo8 libpng16-16t64 libxrender1 libx11-6 libxau6 libxcb1
   libxdmcp6 libbsd0 libmd0 libexpat1 libbrotli1 libbz2-1.0 zlib1g
   libssl3t64 libstdc++6 libgcc-s1
-  fonts-dejavu-core fonts-liberation2
+  fonts-dejavu-core fonts-liberation2 fonts-urw-base35
   xfonts-base xfonts-75dpi xfonts-encodings
 )
 echo '-----> Downloading libraries and fonts from authenticated Ubuntu indexes'

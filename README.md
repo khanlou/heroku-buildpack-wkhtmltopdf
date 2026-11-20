@@ -31,6 +31,8 @@ moved with the app. It does not install a binary in `/usr/local/bin`.
 The binary is wkhtmltopdf 0.12.6.1 with patched Qt, from the official
 `0.12.6.1-3.jammy_amd64` package. It uses OpenSSL 3. Other stacks and
 architectures are rejected.
+Only the PDF executable is retained; wkhtmltoimage and the C API library
+are not included.
 
 The package is downloaded over HTTPS and checked against this SHA-256:
 
@@ -48,7 +50,7 @@ packages without running installation scripts. Exact package versions and
 hashes are recorded in `.wkhtmltopdf/packages.tsv` and `packages.sha256`.
 The stack supplies glibc and the ELF loader.
 
-Fonts include DejaVu, Liberation, X base fonts, and X 75 dpi fonts. Generic
+Fonts include DejaVu, Liberation, URW Base35, X base fonts, and X 75 dpi fonts. Generic
 font families map to DejaVu. Arial/Helvetica, Times New Roman, and Courier New
 map to Liberation. Full CJK and emoji coverage is not included.
 
@@ -67,6 +69,9 @@ python3 test/verify-pdfs.py
 The last command requires Poppler's `pdfinfo`, `pdftotext`, `pdffonts`, and
 `pdftoppm`. The test checks version and license output, bundled font paths,
 Letter-size PDF output, Latin accents, Greek, Cyrillic, and embedded fonts.
+It also checks that all libraries except glibc and its loader come from the
+bundle. An existing image can be used if its system renderer is hidden in
+the test container; system libraries and fonts cannot mask missing bundle files.
 Inspect `test-output/results/preview.png` for visual layout.
 
 ## Limitations
