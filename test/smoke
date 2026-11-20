@@ -18,7 +18,7 @@ echo "$version"
 export LD_LIBRARY_PATH="$runtime/root/usr/lib/x86_64-linux-gnu:$runtime/root/lib/x86_64-linux-gnu"
 export FONTCONFIG_FILE="$runtime/etc/fonts/fonts.conf"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/wkhtmltopdf-$UID}"
-for family in 'DejaVu Sans' 'Liberation Serif' 'DejaVu Sans Mono' 'Nimbus Roman'; do
+for family in 'DejaVu Sans' 'DejaVu Serif' 'DejaVu Sans Mono' 'Nimbus Roman' 'Nimbus Sans'; do
   match=$("$runtime/root/usr/bin/fc-match" --format '%{family}|%{file}\n' "$family")
   echo "$match"
   font_file=$(readlink -f -- "${match#*|}")

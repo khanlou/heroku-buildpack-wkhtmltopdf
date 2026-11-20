@@ -13,7 +13,7 @@ for name in ('file', 'stdin'):
     for expected in ('wkhtmltopdf smoke test', 'café naïve résumé', 'Ελληνικά', 'Привет мир', '0123456789', '€'):
         assert expected in text, f'{name}: missing {expected!r}'
     fonts = subprocess.check_output(['pdffonts', str(pdf)], text=True)
-    for expected in ('DejaVuSans', 'LiberationSerif', 'DejaVuSansMono', 'NimbusRoman'):
+    for expected in ('DejaVuSans', 'DejaVuSerif', 'DejaVuSansMono', 'NimbusRoman', 'NimbusSans-Regular', 'NimbusSans-Bold'):
         assert expected in fonts, f'{name}: missing font {expected}\n{fonts}'
     for row in fonts.splitlines()[2:]:
         # Font name, type (one or more words), encoding, emb, sub, uni, IDs.

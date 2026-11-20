@@ -52,9 +52,11 @@ The stack supplies glibc and the ELF loader.
 
 Fonts include DejaVu, Liberation, URW Base35, X base fonts, and X 75 dpi fonts. Generic
 font families map to DejaVu. Arial and Helvetica map to Nimbus Sans.
-Times New Roman and Courier New map to Liberation. The configuration uses
-the OpenType URW faces and excludes their legacy Type 1 copies to prevent
-Qt font substitution. The DejaVu Mono package is included explicitly.
+The configuration retains Ubuntu's normal font rules and scans the bundled
+font directory. Liberation families are excluded from family matching so
+that Qt selects the URW faces consistently. Their files remain available
+for explicit web-font loading. Legacy Type 1 copies are also excluded.
+The DejaVu Mono package is included explicitly.
 Full CJK and emoji coverage is not included.
 
 ## Manual test
